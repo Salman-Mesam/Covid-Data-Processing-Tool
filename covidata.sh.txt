@@ -1,0 +1,149 @@
+#!/bin/bash
+#Mohammad Salman Mesam
+#260860161
+
+errorMsg(){
+#$1 is the error message I get from the caller
+local errorMessage=$1
+echo "Error:$1"
+echo "Script syntax:
+./covidata.sh -r procedure id range inputFile outputFile compareFile"
+echo "Legal usage examples:
+./covidata.sh get 35 data.csv result.csv
+./covidata.sh -r get 35 2020-01 2020-03 data.csv result.csv
+./covidata.sh compare 10 data.csv result2.csv result.csv
+./covidata.sh -r compare 10 2020-01 2020-03 data.csv result2.csv result.csv"
+
+#since the assignment says that I need to return to the caller.It does not terminate the script.
+#see if I need to add some return statement
+}
+
+# errorMsg $1
+
+if [ "$1" = "-r" ]; then
+	procedure="$2"
+	id="$3"
+	start="$4"
+	end="$5"
+	inputFile="$6"
+	outputFile="$7"
+	compFile="$8"
+else
+	procedure="$1"
+	id="$2"
+	inputFile="$3"
+	outputFile="$4"
+	compFile="$5"
+fi
+
+case "$procedure" in
+	get)
+	if [ "$1" = "-r" ]; then
+		if [ "$#" != 7 ]; then
+			errorMsg "Wrong number of arguments"
+			exit 1
+		fi
+
+	
+                
+		if [ ! -f "$6" ];then
+                    errorMsg "Input file name does not exist" 
+	            exit 1
+         	fi
+
+	grep "^$id," "$inputFile" | awk 'BEGIN { FS = ","; OFS = ","; } (substr($5, 0, 7) >= "'$start'" && substr($5, 0, 7) <= "'$end'") { print $0 }' > "$outputFile"
+
+		printf "rowcount,avgconf,avgdeaths,avgtests\n" >> "$outputFile"
+		cp "$outputFile" temp
+		for year in $(seq ${start:0:4} ${end:0:4})
+		do
+			for month in 01 02 03 04 05 06 07 08 09 10 11 12
+			do
+				awk 'BEGIN { OFS = ","; FS = ","; } (substr($5, 0, 7) == "'"$year-$month"'" && substr($5, 9, 2) >= 1 &&  substr($5, 8, 2) <= 15) { rowcount += 1; numconf += int($6); numdeaths += int($8); numtests += int($11) } END { if (rowcount > 0) { print rowcount, numconf / rowcount, numdeaths / rowcount, numtests / rowcount; } else { print 0, 0, 0, 0 } }' temp >> "$outputFile"
+				awk 'BEGIN { OFS = ","; FS = ","; } (substr($5, 0, 7) == "'"$year-$month"'" && substr($5, 9, 2) >= 16 && substr($5, 8, 2) <= 31) { rowcount += 1; numconf += int($6); numdeaths += int($8); numtests += int($11) } END { if (rowcount > 0) { print rowcount, numconf / rowcount, numdeaths / rowcount, numtests / rowcount; } else { print 0, 0, 0, 0 } }' temp >> "$outputFile"
+			done
+		done
+		rm temp
+	else
+		if [ "$#" != 4 ]; then
+			errorMsg "Wrong number of arguments"
+			exit 1
+		fi
+
+		if [ ! -f "$3" ];then
+		        errorMsg "Input file name does not exist"
+			exit 1
+		fi
+		grep "^$id," "$inputFile" | awk 'BEGIN { rowcount = 0; numconf = 0; numdeaths = 0; numtests = 0; OFS = ","; FS = ","; } { print $0 } { rowcount += 1; numconf += int($6); numdeaths += int($8); numtests += int($11) } END { print "rowcount","avgconf","avgdeaths","avgtests"; print rowcount, numconf / rowcount, numdeaths / rowcount, numtests / rowcount; }' > "$outputFile"
+	fi
+	;;
+	compare)
+	# 1. compute stats for given id ($1) but don't append
+	# 2. copy compFile ($5) to outputFile ($4)  except the last two rows
+	# 3. append stats of id and compFile
+	# 4. append to outputFile ($4) diff stat
+
+	if [ "$1" = "-r" ]; then
+		if [ "$#" != 8 ]; then
+			errorMsg "Wrong number of arguments"
+			exit 1
+		fi
+
+		if [ ! -f "$6" ];then
+		        errorMsg "Input file name does not exist"
+			exit 1
+		fi
+
+
+		# all data rows for id
+		grep "^$id," "$inputFile" | awk 'BEGIN { FS = ","; OFS = ","; } (substr($5, 0, 7) >= "'$start'" && substr($5, 0, 7) <= "'$end'") { print $0 }' > "$outputFile"
+
+		# all data rows for id2
+		sed -n '1,/rowcount,avgconf,avgdeaths,avgtests/p' "$compFile" | sed '$d' >> "$outputFile"
+
+		# all the statistics in multiple rows of 15 days for id
+		printf "rowcount,avgconf,avgdeaths,avgtests\n" >> "$outputFile"
+		grep "^$id," "$inputFile" | awk 'BEGIN { FS = ","; OFS = ","; } (substr($5, 0, 7) >= "'$start'" && substr($5, 0, 7) <= "'$end'") { print $0 }' > temp
+		for year in $(seq ${start:0:4} ${end:0:4})
+		do
+			for month in 01 02 03 04 05 06 07 08 09 10 11 12
+			do
+				awk 'BEGIN { OFS = ","; FS = ","; } (substr($5, 0, 7) == "'"$year-$month"'" && substr($5, 9, 2) >= 1 &&  substr($5, 8, 2) <= 15) { rowcount += 1; numconf += int($6); numdeaths += int($8); numtests += int($11) } END { if (rowcount > 0) { print rowcount, numconf / rowcount, numdeaths / rowcount, numtests / rowcount; } else { print 0, 0, 0, 0 } }' temp >> "$outputFile"
+				awk 'BEGIN { OFS = ","; FS = ","; } (substr($5, 0, 7) == "'"$year-$month"'" && substr($5, 9, 2) >= 16 && substr($5, 8, 2) <= 31) { rowcount += 1; numconf += int($6); numdeaths += int($8); numtests += int($11) } END { if (rowcount > 0) { print rowcount, numconf / rowcount, numdeaths / rowcount, numtests / rowcount; } else { print 0, 0, 0, 0 } }' temp >> "$outputFile"
+			done
+		done
+		rm temp
+
+		# all the statistics in multiple rows of 15 days for id2
+		sed -n '/rowcount,avgconf,avgdeaths,avgtests/,$p' "$compFile" >> "$outputFile"
+
+		# the differences in multiple rows of 15 days
+		# unfortunately, i'm out of time :(
+	else
+		if [ "$#" != 5 ]; then
+			errorMsg "Wrong number of arguments"
+			exit 1
+		fi
+                
+		if [ ! -f "$3" ];then
+                      errorMsg "Input file name does not exist"
+		      exit 1
+	        fi
+
+		
+		#2
+		head -n -2 $compFile > $outputFile
+
+		#3
+		grep "^$id," "$inputFile" | awk 'BEGIN { rowcount = 0; numconf = 0; numdeaths = 0; numtests = 0; OFS = ","; FS = ","; } { rowcount += 1; numconf += int($6); numdeaths += int($8); numtests += int($11) } END { print "rowcount","avgconf","avgdeaths","avgtests"; print rowcount, numconf / rowcount, numdeaths / rowcount, numtests / rowcount; }' >> "$outputFile"
+		tail -n 2 $compFile >> $outputFile
+
+		#4
+		tail -n 4 $outputFile | sed '1d' | sed '2d' | awk 'BEGIN { FS = ","; OFS = ","; } { rowcount[NR] = $1; numconf[NR] = $2; numdeaths[NR] = $3; numtest[NR] = $4 } END { print "diffcount","diffavgconf","diffavgdeath","diffavgtests"; print rowcount[1] - rowcount[2], numconf[1] - numconf[2], numdeaths[1] - numdeaths[2], numtests[1] - numtests[2]; }' >> "$outputFile"
+	fi
+	;;
+	*)
+	errorMsg "Procedure not provided"
+	exit 1
+	;;
+esac
